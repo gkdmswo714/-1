@@ -1,0 +1,953 @@
+<!doctype html>
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel Iso Field</title>
+<style>
+  :root{ --bg:#d3d3d3; --ink:#2150ff; --hot:#ff4a14; --txt:#1a1a1a; --pw:330px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);
+    font-family:ui-monospace,"SF Mono",Menlo,"Apple SD Gothic Neo",monospace;-webkit-font-smoothing:antialiased}
+  #iso{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:none;touch-action:none}
+
+  #cap{position:fixed;top:16px;left:16px;font-size:11px;letter-spacing:.08em;line-height:1.6;pointer-events:none;z-index:10}
+  #cap b{display:block;font-size:13px;color:var(--ink)}
+  #cap .belief{margin-top:8px;font-size:12px;letter-spacing:0}
+  #cap .belief span{padding:0 2px;transition:background .3s,color .3s}
+  #cap .belief span.on{background:var(--ink);color:var(--bg)}
+  #cap i{display:block;font-style:normal;font-size:10px;opacity:.6;text-transform:uppercase}
+  body.nocap #cap{display:none}
+
+  #bar{position:fixed;left:16px;right:16px;bottom:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+    font-size:11px;letter-spacing:.06em;text-transform:uppercase;z-index:10}
+  body.panel #bar{right:calc(var(--pw) + 16px)}
+  #bar button{font:inherit;letter-spacing:inherit;text-transform:uppercase;color:var(--txt);
+    background:rgba(255,255,255,.55);border:1px solid var(--txt);height:30px;padding:0 12px;cursor:pointer}
+  #bar button:focus-visible{outline:2px solid var(--hot);outline-offset:2px}
+  #count{color:var(--ink);font-weight:700;min-width:52px}
+  #hint{opacity:.7;margin-left:auto}
+  @media (max-width:900px){ #hint{display:none} }
+
+  /* ---------- panel ---------- */
+  #panel{position:fixed;top:0;right:0;bottom:0;width:var(--pw);z-index:20;display:none;flex-direction:column;
+    background:rgba(248,248,248,.94);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    border-left:1px solid rgba(0,0,0,.15);color:#1a1a1a;font-size:11px;
+    font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+  body.panel #panel{display:flex}
+  #panel header{padding:12px 14px;border-bottom:1px solid rgba(0,0,0,.12);display:flex;align-items:baseline;gap:8px}
+  #panel header b{font-size:13px}
+  #panel header span{opacity:.55;font-family:ui-monospace,Menlo,monospace}
+  #pbody{flex:1;overflow:auto;padding:4px 0 12px}
+  #panel details{border-bottom:1px solid rgba(0,0,0,.08)}
+  #panel summary{list-style:none;cursor:pointer;padding:10px 14px;display:flex;align-items:center;gap:8px;font-weight:700;font-size:12px}
+  #panel summary::-webkit-details-marker{display:none}
+  #panel summary::before{content:'▸';font-size:10px;opacity:.5;transition:transform .2s}
+  #panel details[open] summary::before{transform:rotate(90deg)}
+  #panel summary label{margin-left:auto;font-weight:400;font-size:10px;opacity:.7;display:flex;gap:4px;align-items:center;cursor:pointer}
+  .row{padding:5px 14px 7px}
+  .rh{display:flex;justify-content:space-between;gap:8px;margin-bottom:3px}
+  .rh em{font-style:normal;font-family:ui-monospace,Menlo,monospace;opacity:.7}
+  .row small{display:block;opacity:.5;font-size:10px;margin-top:2px;line-height:1.35}
+  .row input[type=range]{width:100%;accent-color:#1a1a1a}
+  .row input[type=color]{width:100%;height:24px;border:1px solid rgba(0,0,0,.2);background:none;padding:0;cursor:pointer}
+  .row input[type=text],.row select,.row textarea{width:100%;font:inherit;padding:5px 6px;border:1px solid rgba(0,0,0,.25);background:#fff}
+  .row textarea{height:64px;resize:vertical}
+  .row.check{display:flex;align-items:center;gap:8px}
+  .row.check small{margin:0}
+  .presets{display:flex;flex-wrap:wrap;gap:4px}
+  .presets button{display:flex;gap:2px;align-items:center;padding:3px 6px;border:1px solid rgba(0,0,0,.25);background:#fff;font:inherit;font-size:10px;cursor:pointer}
+  .presets i{width:10px;height:10px;display:inline-block;border:1px solid rgba(0,0,0,.15)}
+  .fixed{margin:10px 14px;padding:8px 10px;background:rgba(0,0,0,.05);line-height:1.5}
+  .fixed b{display:block}
+  #pfoot{border-top:1px solid rgba(0,0,0,.15);padding:10px 14px 14px;display:flex;flex-direction:column;gap:6px;background:rgba(255,255,255,.6)}
+  #pfoot .btns{display:flex;gap:6px}
+  #pfoot button{flex:1;font:inherit;padding:7px 6px;border:1px solid #1a1a1a;background:#fff;cursor:pointer}
+  #pfoot button.save{background:#1a1a1a;color:#fff;font-weight:700;font-size:12px;padding:10px}
+  #pfoot button:focus-visible,#panel summary:focus-visible{outline:2px solid var(--hot);outline-offset:1px}
+  #pstatus{font-size:10px;opacity:.7;min-height:14px;word-break:break-all}
+  .log{font-size:10px;line-height:1.5;opacity:.75}
+  .log div{padding:2px 0;border-top:1px dashed rgba(0,0,0,.12)}
+</style>
+</head>
+<body class="panel">
+<canvas id="iso"></canvas>
+
+<div id="cap"><b id="capTitle">7 — PIXEL</b><i>Dot·Matrix / Isometric Field</i><div class="belief" id="bl"></div></div>
+<div id="bar">
+  <span id="count">01/04</span>
+  <button id="pause">Pause</button>
+  <button id="shuf">Scatter</button>
+  <button id="ptog">Panel</button>
+  <span id="hint">drag = paint · shift+drag = erase · wheel = brush · space = next · P = panel · S = png</span>
+</div>
+
+<aside id="panel" aria-label="조절 패널">
+  <header><b>조절 패널</b><span id="pver">01_pixel-iso-ver07</span></header>
+  <div id="pbody"></div>
+  <div id="pfoot">
+    <div class="row" style="padding:0">
+      <div class="rh"><span>이번 버전 메모</span></div>
+      <textarea id="note" placeholder="이번 버전에서 다룬 것 하나 / 알고 있는 한계"></textarea>
+    </div>
+    <div class="btns">
+      <button id="copyJson">설정 JSON 복사</button>
+      <button id="pasteJson">JSON 붙여넣기</button>
+      <button id="reset">처음 값으로</button>
+    </div>
+    <button class="save" id="save">저장 → 다음 버전</button>
+    <div id="pstatus"></div>
+    <div class="log" id="log"></div>
+  </div>
+</aside>
+
+<script>
+/* ------------------------------------------------------------------
+   이 파일의 원본 소스 (저장할 때 다음 버전 파일의 바탕이 됨)
+   ------------------------------------------------------------------ */
+const SOURCE = '<!doctype html>\n' + document.documentElement.outerHTML;
+const CONCEPT = '01_pixel-iso';
+
+/*@@FIXED_START*/
+// ── ver07 ── 2026. 11. 20. 오전 11:50:05 저장 · ver06에서 이어짐
+// 이번 버전 메모: -
+// 잠긴 그룹 (각 버전에서 정한 고정 설정, 패널에서 빠짐): 없음
+const VERSION = 7;
+// ver06에서 정한 고정 설정
+const FIXED = {
+  "values": {
+    "bg": "#000000",
+    "big": "#c6ff3d",
+    "dot": "#949494",
+    "small": "#949494",
+    "tileText": "#9e9e9e",
+    "cursor": "#000000",
+    "ui": "#e8e8e8",
+    "sentence": "사람은 어디에서나 매순간 변화한다",
+    "autoplay": true,
+    "wordTime": 4.4,
+    "morphTime": 1.6,
+    "morphSpread": 0,
+    "churn": 0,
+    "cells": 62,
+    "maxGlyph": 13,
+    "fit": 0.65,
+    "angle": 44,
+    "zoom": 1,
+    "panelShift": true,
+    "tileSize": 0.56,
+    "circleSize": 0.42,
+    "diamondSize": 0.32,
+    "smallSize": 0.74,
+    "smallWeight": 900,
+    "smallFont": "mono",
+    "tileTextSize": 0.68,
+    "popSpeed": 5,
+    "popBounce": 1.7,
+    "thEmpty": 0.16,
+    "thDiamond": 0.42,
+    "thLetter": 0.62,
+    "thTile": 0.95,
+    "tileRatio": 0.47,
+    "wordWeight": 0.9,
+    "halo": 1,
+    "waveAmp": 0.3,
+    "waveSpeed": 0.9,
+    "waveScale": 0.21,
+    "blobAmp": 0.2,
+    "echoAmp": 0.3,
+    "echoSpeed": 3,
+    "echoGap": 10,
+    "echoText": "PEOPLE CHANGE, EVERYWHERE, EVERY MOMENT  ·  ",
+    "brushR": 1,
+    "brushPower": 0.98,
+    "paintSpeed": 3,
+    "paintFade": 10,
+    "idle": false,
+    "idleDelay": 2.6,
+    "showCursor": true,
+    "tileMode": "clock",
+    "flicker": 0.12,
+    "showCaption": false,
+    "showReadout": false
+  },
+  "groups": [],
+  "from": {}
+};
+const LOG = [
+  {
+    "ver": 2,
+    "from": 1,
+    "date": "2026. 11. 20. 오전 10:26:30",
+    "note": "",
+    "locked": []
+  },
+  {
+    "ver": 3,
+    "from": 2,
+    "date": "2026. 11. 20. 오전 10:38:04",
+    "note": "",
+    "locked": []
+  },
+  {
+    "ver": 5,
+    "from": 3,
+    "date": "2026. 11. 20. 오전 10:44:46",
+    "note": "",
+    "locked": []
+  },
+  {
+    "ver": 6,
+    "from": 5,
+    "date": "2026. 11. 20. 오전 10:46:32",
+    "note": "",
+    "locked": []
+  },
+  {
+    "ver": 7,
+    "from": 6,
+    "date": "2026. 11. 20. 오전 11:50:05",
+    "note": "",
+    "locked": []
+  }
+];
+/*@@FIXED_END*/
+
+/* ==================================================================
+   규칙 (말로 먼저)
+   - 신념 문장을 단어 단위로 나눠, 일정 시간마다 다음 단어로 넘어간다.
+   - 넘어갈 때 칸마다 늦게/빨리 바뀌어 이전 단어가 다음 단어로 흩어지며 변한다.
+   - 칸마다 '에너지'가 있고, 에너지가 커질수록 빈칸 → 마름모 → 작은 글씨 → 원 → 타일로 바뀐다.
+   - 배경 전체에 영어 문장이 줄마다 반대 방향으로 흐른다 (어디에서나).
+   - 타일 안의 숫자는 지금 이 순간의 시각이다 (매순간).
+   - 커서가 지나간 곳의 에너지가 올라가고, 드래그하면 칠해졌다가 서서히 사라진다.
+   ================================================================== */
+
+const DEFAULTS = {
+  // 색
+  bg: '#d3d3d3', big: '#2150ff', dot: '#2150ff', small: '#ff4a14', tileText: '#e9ecff', cursor: '#ff4a14', ui: '#1a1a1a',
+  // 문장
+  sentence: '사람은 어디에서나 매순간 변화한다', autoplay: true, wordTime: 3.6, morphTime: 1.6, morphSpread: 0.6, churn: 0.6,
+  // 격자와 시점
+  cells: 72, maxGlyph: 16, fit: 0.74, angle: 30, zoom: 1, panelShift: true,
+  // 모양
+  tileSize: 1, circleSize: 0.47, diamondSize: 0.17, smallSize: 0.74, smallWeight: 500, smallFont: 'gothic',
+  tileTextSize: 0.62, popSpeed: 5, popBounce: 1.7,
+  // 단계 문턱
+  thEmpty: 0.22, thDiamond: 0.42, thLetter: 0.62, thTile: 0.95, tileRatio: 0.47,
+  // 배경 흐름
+  wordWeight: 0.9, halo: 1.0, waveAmp: 0.3, waveSpeed: 0.9, waveScale: 0.21, blobAmp: 0.2,
+  echoAmp: 0.3, echoSpeed: 3, echoGap: 10, echoText: 'PEOPLE CHANGE, EVERYWHERE, EVERY MOMENT  ·  ',
+  // 커서
+  brushR: 4.5, brushPower: 0.95, paintSpeed: 3, paintFade: 10, idle: true, idleDelay: 2.6, showCursor: true,
+  // 타일 속 글자
+  tileMode: 'clock', flicker: 0.12,
+  // 화면
+  showCaption: true, showReadout: true
+};
+const CFG = { ...DEFAULTS, ...(FIXED ? FIXED.values : {}) };
+const fixedGroups = FIXED ? FIXED.groups.slice() : [];
+const fixedFrom = FIXED ? FIXED.from : {};
+
+/* ==================================================================
+   패널 정의 — 디자이너의 말로, 양 끝값의 뜻까지
+   ================================================================== */
+const SCHEMA = [
+  { id: 'color', title: '색', items: [
+    { type: 'presets' },
+    { k: 'bg', type: 'color', label: '배경색' },
+    { k: 'big', type: 'color', label: '큰 글씨 색', hint: '단어를 이루는 타일과 원' },
+    { k: 'small', type: 'color', label: '작은 글씨 색', hint: '단어 가장자리에 번지는 글자' },
+    { k: 'dot', type: 'color', label: '마름모(점) 색', hint: '가장 약한 에너지의 작은 점' },
+    { k: 'tileText', type: 'color', label: '타일 속 숫자 색' },
+    { k: 'cursor', type: 'color', label: '커서 색' },
+    { k: 'ui', type: 'color', label: '화면 글자 색', hint: '캡션, 하단 버튼' }
+  ]},
+  { id: 'sentence', title: '문장', items: [
+    { k: 'sentence', type: 'text', label: '신념 문장', hint: '띄어쓰기 단위로 한 단어씩 나타남' },
+    { k: 'autoplay', type: 'check', label: '자동으로 다음 단어' },
+    { k: 'wordTime', type: 'range', min: 1, max: 12, step: 0.1, label: '한 단어 머무는 시간', unit: '초', hint: '짧으면 정신없이 바뀜, 길면 오래 읽힘' },
+    { k: 'morphTime', type: 'range', min: 0.2, max: 5, step: 0.1, label: '바뀌는 데 걸리는 시간', unit: '초', hint: '짧으면 툭 바뀜, 길면 천천히 스며듦' },
+    { k: 'morphSpread', type: 'range', min: 0, max: 0.95, step: 0.01, label: '흩어지며 바뀌는 정도', pct: true, hint: '0이면 모든 칸이 동시에, 100이면 칸마다 제각각' },
+    { k: 'churn', type: 'range', min: 0, max: 1.5, step: 0.01, label: '바뀌는 동안 들끓음', pct: true, hint: '0이면 조용히, 높을수록 지글지글 깜빡임' }
+  ]},
+  { id: 'layout', title: '격자와 시점', items: [
+    { k: 'cells', type: 'range', min: 36, max: 120, step: 1, label: '격자 칸 수', unit: '칸', hint: '적으면 칸이 큼직, 많으면 촘촘' },
+    { k: 'maxGlyph', type: 'range', min: 7, max: 30, step: 1, label: '큰 글씨 최대 크기', unit: '칸', hint: '한글 한 글자가 쓸 수 있는 최대 칸 수' },
+    { k: 'fit', type: 'range', min: 0.3, max: 1.2, step: 0.01, label: '단어가 화면을 차지하는 정도', pct: true, hint: '낮으면 작게 가운데, 높으면 화면 가득' },
+    { k: 'angle', type: 'range', min: 10, max: 60, step: 1, label: '바닥 기울기', unit: '°', hint: '10이면 납작하게 누움, 60이면 거의 세워 봄 (30이 표준 아이소)' },
+    { k: 'zoom', type: 'range', min: 0.5, max: 2.5, step: 0.01, label: '확대', unit: '×', hint: '1보다 작으면 격자 끝이 보임' },
+    { k: 'panelShift', type: 'check', label: '패널 열면 그림을 왼쪽으로 비킴' }
+  ]},
+  { id: 'shape', title: '모양', items: [
+    { k: 'tileSize', type: 'range', min: 0.3, max: 1.1, step: 0.01, label: '타일 크기', pct: true, hint: '100이면 이웃 타일과 딱 붙어 한 덩어리' },
+    { k: 'circleSize', type: 'range', min: 0.1, max: 0.7, step: 0.01, label: '원 크기', pct: true, hint: '50 근처면 이웃 원과 맞닿음' },
+    { k: 'diamondSize', type: 'range', min: 0.03, max: 0.5, step: 0.01, label: '마름모 크기', pct: true },
+    { k: 'smallSize', type: 'range', min: 0.3, max: 1.4, step: 0.01, label: '작은 글씨 크기', pct: true },
+    { k: 'smallWeight', type: 'range', min: 100, max: 900, step: 100, label: '작은 글씨 굵기', hint: '100 가늘게 — 900 굵게' },
+    { k: 'smallFont', type: 'select', label: '작은 글씨 서체', options: [['gothic', '고딕'], ['mono', '모노스페이스'], ['serif', '명조']] },
+    { k: 'tileTextSize', type: 'range', min: 0.2, max: 1, step: 0.01, label: '타일 속 숫자 크기', pct: true },
+    { k: 'popSpeed', type: 'range', min: 1, max: 20, step: 0.5, label: '모양이 바뀌는 속도', hint: '낮으면 천천히 피어남, 높으면 즉시' },
+    { k: 'popBounce', type: 'range', min: 0, max: 4, step: 0.1, label: '튀어나오는 탄성', hint: '0이면 부드럽게, 높을수록 통통 튐' }
+  ]},
+  { id: 'threshold', title: '에너지 → 모양 경계', items: [
+    { k: 'thEmpty', type: 'range', min: 0, max: 1, step: 0.01, label: '빈칸 | 마름모', hint: '낮추면 바탕에 점이 많아짐' },
+    { k: 'thDiamond', type: 'range', min: 0, max: 1.2, step: 0.01, label: '마름모 | 작은 글씨', hint: '낮추면 작은 글씨가 넓게 퍼짐' },
+    { k: 'thLetter', type: 'range', min: 0, max: 1.5, step: 0.01, label: '작은 글씨 | 원', hint: '낮추면 원이 많아짐' },
+    { k: 'thTile', type: 'range', min: 0, max: 2, step: 0.01, label: '원 | 타일이 되는 최소 에너지' },
+    { k: 'tileRatio', type: 'range', min: 0, max: 1, step: 0.01, label: '원 대신 타일이 되는 비율', pct: true, hint: '0이면 전부 원, 100이면 전부 타일' }
+  ]},
+  { id: 'field', title: '배경 흐름', items: [
+    { k: 'wordWeight', type: 'range', min: 0, max: 2, step: 0.01, label: '단어 자체의 세기', hint: '0이면 단어가 사라지고 번짐만 남음' },
+    { k: 'halo', type: 'range', min: 0, max: 2.5, step: 0.01, label: '단어 주변 번짐', hint: '0이면 외곽이 딱 떨어짐, 높으면 넓게 번짐' },
+    { k: 'waveAmp', type: 'range', min: 0, max: 1, step: 0.01, label: '물결 세기', hint: '0이면 정지, 높으면 일렁임' },
+    { k: 'waveSpeed', type: 'range', min: 0, max: 4, step: 0.05, label: '물결 속도' },
+    { k: 'waveScale', type: 'range', min: 0.03, max: 0.8, step: 0.01, label: '물결 촘촘함', hint: '낮으면 큰 너울, 높으면 잔물결' },
+    { k: 'blobAmp', type: 'range', min: 0, max: 0.8, step: 0.01, label: '큰 얼룩 세기' },
+    { k: 'echoText', type: 'text', label: '배경에 흐르는 문장' },
+    { k: 'echoAmp', type: 'range', min: 0, max: 1, step: 0.01, label: '배경 문장 진하기', hint: '0이면 안 보임, 높으면 작은 글씨까지 올라옴' },
+    { k: 'echoSpeed', type: 'range', min: 0, max: 15, step: 0.5, label: '배경 문장 흐르는 속도', unit: '칸/초' },
+    { k: 'echoGap', type: 'range', min: 8, max: 24, step: 1, label: '배경 문장 줄 간격', unit: '칸' }
+  ]},
+  { id: 'brush', title: '커서와 붓', items: [
+    { k: 'brushR', type: 'range', min: 1, max: 16, step: 0.1, label: '붓 크기', unit: '칸', hint: '휠로도 조절' },
+    { k: 'brushPower', type: 'range', min: 0, max: 2, step: 0.01, label: '커서가 깨우는 힘', hint: '0이면 커서 반응 없음' },
+    { k: 'paintSpeed', type: 'range', min: 0.5, max: 10, step: 0.1, label: '칠해지는 속도' },
+    { k: 'paintFade', type: 'range', min: 1, max: 60, step: 1, label: '칠한 흔적이 남는 시간', unit: '초', hint: '짧으면 금방 사라짐, 길면 오래 남음' },
+    { k: 'idle', type: 'check', label: '가만히 두면 혼자 돌아다님' },
+    { k: 'idleDelay', type: 'range', min: 0.5, max: 10, step: 0.1, label: '혼자 움직이기까지 기다림', unit: '초' },
+    { k: 'showCursor', type: 'check', label: '커서 표시' }
+  ]},
+  { id: 'tile', title: '타일 속 글자', items: [
+    { k: 'tileMode', type: 'select', label: '타일에 들어가는 것', options: [['clock', '지금 시각'], ['bits', '0 1 %'], ['word', '지금 단어의 글자']] },
+    { k: 'flicker', type: 'range', min: 0, max: 1, step: 0.01, label: '0.1초마다 깜빡이는 타일', pct: true }
+  ]},
+  { id: 'screen', title: '화면', items: [
+    { k: 'showCaption', type: 'check', label: '왼쪽 위 캡션 보이기' },
+    { k: 'showReadout', type: 'check', label: '시각·좌표 표시' }
+  ]}
+];
+const GROUP_TITLE = Object.fromEntries(SCHEMA.map(g => [g.id, g.title]));
+
+const PRESETS = [
+  { name: '레퍼런스', bg: '#d3d3d3', big: '#2150ff', dot: '#2150ff', small: '#ff4a14', tileText: '#e9ecff', cursor: '#ff4a14', ui: '#1a1a1a' },
+  { name: '흑백', bg: '#f2f2f0', big: '#111111', dot: '#111111', small: '#8a8a8a', tileText: '#f2f2f0', cursor: '#111111', ui: '#111111' },
+  { name: '종이', bg: '#efe8d8', big: '#1d1d1b', dot: '#c2381e', small: '#c2381e', tileText: '#efe8d8', cursor: '#c2381e', ui: '#1d1d1b' },
+  { name: '밤', bg: '#0e0f13', big: '#c6ff3d', dot: '#5b6170', small: '#ff4fa3', tileText: '#0e0f13', cursor: '#ff4fa3', ui: '#e8e8e8' },
+  { name: '포스터', bg: '#e8e7ec', big: '#1f74e8', dot: '#ff5b47', small: '#a3233a', tileText: '#ffd21a', cursor: '#a3233a', ui: '#1a1a1a' },
+  { name: '노랑', bg: '#f7e23a', big: '#2b2727', dot: '#2b2727', small: '#ff6a12', tileText: '#f7e23a', cursor: '#ff6a12', ui: '#2b2727' }
+];
+
+/* ==================================================================
+   글리프 — 5×7 라틴 + 한글은 시스템 폰트를 점으로 변환
+   ================================================================== */
+const FONT_SRC = {
+  A:'.###.|#...#|#...#|#####|#...#|#...#|#...#', B:'####.|#...#|#...#|####.|#...#|#...#|####.',
+  C:'.###.|#...#|#....|#....|#....|#...#|.###.', D:'####.|#...#|#...#|#...#|#...#|#...#|####.',
+  E:'#####|#....|#....|####.|#....|#....|#####', F:'#####|#....|#....|####.|#....|#....|#....',
+  G:'.###.|#...#|#....|#.###|#...#|#...#|.####', H:'#...#|#...#|#...#|#####|#...#|#...#|#...#',
+  I:'.###.|..#..|..#..|..#..|..#..|..#..|.###.', J:'..###|...#.|...#.|...#.|...#.|#..#.|.##..',
+  K:'#...#|#..#.|#.#..|##...|#.#..|#..#.|#...#', L:'#....|#....|#....|#....|#....|#....|#####',
+  M:'#...#|##.##|#.#.#|#.#.#|#...#|#...#|#...#', N:'#...#|#...#|##..#|#.#.#|#..##|#...#|#...#',
+  O:'.###.|#...#|#...#|#...#|#...#|#...#|.###.', P:'####.|#...#|#...#|####.|#....|#....|#....',
+  Q:'.###.|#...#|#...#|#...#|#.#.#|#..#.|.##.#', R:'####.|#...#|#...#|####.|#.#..|#..#.|#...#',
+  S:'.####|#....|#....|.###.|....#|....#|####.', T:'#####|..#..|..#..|..#..|..#..|..#..|..#..',
+  U:'#...#|#...#|#...#|#...#|#...#|#...#|.###.', V:'#...#|#...#|#...#|#...#|#...#|.#.#.|..#..',
+  W:'#...#|#...#|#...#|#.#.#|#.#.#|#.#.#|.#.#.', X:'#...#|#...#|.#.#.|..#..|.#.#.|#...#|#...#',
+  Y:'#...#|#...#|.#.#.|..#..|..#..|..#..|..#..', Z:'#####|....#|...#.|..#..|.#...|#....|#####',
+  0:'.###.|#...#|#..##|#.#.#|##..#|#...#|.###.', 1:'..#..|.##..|..#..|..#..|..#..|..#..|.###.',
+  2:'.###.|#...#|....#|...#.|..#..|.#...|#####', 3:'#####|...#.|..#..|...#.|....#|#...#|.###.',
+  4:'...#.|..##.|.#.#.|#..#.|#####|...#.|...#.', 5:'#####|#....|####.|....#|....#|#...#|.###.',
+  6:'..##.|.#...|#....|####.|#...#|#...#|.###.', 7:'#####|....#|...#.|..#..|.#...|.#...|.#...',
+  8:'.###.|#...#|#...#|.###.|#...#|#...#|.###.', 9:'.###.|#...#|#...#|.####|....#|...#.|.##..',
+  ' ':'.....|.....|.....|.....|.....|.....|.....', '-':'.....|.....|.....|#####|.....|.....|.....',
+  '.':'.....|.....|.....|.....|.....|.##..|.##..', ',':'.....|.....|.....|.....|.##..|..#..|.#...',
+  '%':'##...|##..#|...#.|..#..|.#...|#..##|...##', ':':'.....|.##..|.##..|.....|.##..|.##..|.....',
+  '!':'..#..|..#..|..#..|..#..|..#..|.....|..#..', '?':'.###.|#...#|....#|...#.|..#..|.....|..#..',
+  '·':'.....|.....|.....|..#..|.....|.....|.....'
+};
+const FONT = {};
+for (const k in FONT_SRC) FONT[k] = FONT_SRC[k].split('|').map(r => [...r].map(c => c === '#'));
+const isLatinCh = ch => FONT[ch.toUpperCase()] !== undefined;
+const isLatin = s => [...s].every(isLatinCh);
+const latinGlyph = ch => FONT[ch.toUpperCase()] || FONT['?'];
+
+const rcache = new Map();
+const rcv = document.createElement('canvas');
+const rctx = rcv.getContext('2d', { willReadFrequently: true });
+function rasterGlyph(ch, R) {
+  const key = ch + '|' + R;
+  if (rcache.has(key)) return rcache.get(key);
+  const K = 8, S = R * K;
+  rcv.width = rcv.height = S;
+  rctx.clearRect(0, 0, S, S);
+  rctx.fillStyle = '#000'; rctx.textAlign = 'center'; rctx.textBaseline = 'middle';
+  rctx.font = `800 ${S * 0.94}px "Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif`;
+  rctx.fillText(ch, S / 2, S / 2 + S * 0.05);
+  const d = rctx.getImageData(0, 0, S, S).data;
+  const g = [];
+  for (let r = 0; r < R; r++) {
+    const row = [];
+    for (let c = 0; c < R; c++) {
+      let a = 0;
+      for (let y = 0; y < K; y++) for (let x = 0; x < K; x++) a += d[((r * K + y) * S + c * K + x) * 4 + 3];
+      row.push(a / (K * K) > 255 * 0.4);
+    }
+    g.push(row);
+  }
+  rcache.set(key, g);
+  return g;
+}
+
+const hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const ease = x => { const c1 = CFG.popBounce, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+
+/* ==================================================================
+   격자
+   ================================================================== */
+let dpr = Math.min(window.devicePixelRatio || 1, 2);
+let W = innerWidth, H = innerHeight;
+const iso = document.getElementById('iso');
+const ictx = iso.getContext('2d');
+let N, NN, maskA, maskB, blurA, blurB, paint, pop, shown;
+let morphStart = -10;
+const pointer = { gx: 0, gy: 0, last: -1e9, down: false, erase: false };
+let words = [], wordIdx = 0, wordStart = 0, paused = false, letters = '사람은';
+
+function allocGrid() {
+  N = Math.round(CFG.cells); NN = N * N;
+  maskA = new Float32Array(NN); maskB = new Float32Array(NN);
+  blurA = new Float32Array(NN); blurB = new Float32Array(NN);
+  paint = new Float32Array(NN); pop = new Float32Array(NN);
+  shown = new Int8Array(NN).fill(-1);
+  pointer.gx = pointer.gy = N / 2;
+}
+
+let echoBits = [], echoCols = 1;
+function buildEcho() {
+  const chars = [...(CFG.echoText || ' ')];
+  const cols = [];
+  for (const ch of chars) {
+    const lat = isLatinCh(ch);
+    const g = lat ? latinGlyph(ch) : rasterGlyph(ch, 7);
+    const w = lat ? 5 : 7;
+    for (let c = 0; c < w; c++) cols.push(g.map(row => row[c]));
+    cols.push([0, 0, 0, 0, 0, 0, 0]);
+  }
+  echoCols = Math.max(1, cols.length);
+  echoBits = [];
+  for (let r = 0; r < 7; r++) {
+    const row = new Uint8Array(echoCols);
+    cols.forEach((col, i) => row[i] = col[r] ? 1 : 0);
+    echoBits.push(row);
+  }
+}
+
+function layoutWord(word) {
+  const chars = [...word], lim = N * CFG.fit;
+  if (isLatin(word)) {
+    for (let sc = 4; sc >= 1; sc--) for (let per = chars.length; per >= 1; per--) {
+      const lines = Math.ceil(chars.length / per);
+      const w = per * 6 * sc - sc, h = lines * 9 * sc - 2 * sc;
+      if (7 * sc <= CFG.maxGlyph && w + h <= lim && h <= lim * 0.85) return { kind: 'latin', sc, per, w, h, chars };
+    }
+    return { kind: 'latin', sc: 1, per: 6, w: 35, h: 9 * Math.ceil(chars.length / 6) - 2, chars };
+  }
+  for (let R = Math.round(CFG.maxGlyph); R >= 6; R--) for (let per = chars.length; per >= 1; per--) {
+    const lines = Math.ceil(chars.length / per);
+    const w = per * (R + 1) - 1, h = lines * (R + 2) - 2;
+    if (w + h <= lim && h <= lim * 0.85) return { kind: 'ras', R, per, w, h, chars };
+  }
+  return { kind: 'ras', R: 6, per: 4, w: 27, h: 6 * Math.ceil(chars.length / 4), chars };
+}
+
+function buildMask(word, mask, blurF) {
+  mask.fill(0); blurF.fill(0);
+  const L = layoutWord(word);
+  const ox = Math.round((N - L.w) / 2), oy = Math.round((N - L.h) / 2);
+  const put = (x, y) => { if (x >= 0 && y >= 0 && x < N && y < N) mask[y * N + x] = 1; };
+  L.chars.forEach((ch, idx) => {
+    const col = idx % L.per, line = Math.floor(idx / L.per);
+    if (L.kind === 'latin') {
+      const g = latinGlyph(ch), sc = L.sc;
+      for (let r = 0; r < 7; r++) for (let c = 0; c < 5; c++) if (g[r][c])
+        for (let a = 0; a < sc; a++) for (let b = 0; b < sc; b++) put(ox + (col * 6 + c) * sc + a, oy + (line * 9 + r) * sc + b);
+    } else {
+      const g = rasterGlyph(ch, L.R);
+      for (let r = 0; r < L.R; r++) for (let c = 0; c < L.R; c++) if (g[r][c]) put(ox + col * (L.R + 1) + c, oy + line * (L.R + 2) + r);
+    }
+  });
+  const tmp = new Float32Array(NN); blurF.set(mask);
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      let s = 0; for (let k = -2; k <= 2; k++) { const xx = x + k; if (xx >= 0 && xx < N) s += blurF[y * N + xx]; }
+      tmp[y * N + x] = s / 5;
+    }
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      let s = 0; for (let k = -2; k <= 2; k++) { const yy = y + k; if (yy >= 0 && yy < N) s += tmp[yy * N + x]; }
+      blurF[y * N + x] = s / 5;
+    }
+  }
+}
+
+function goWord(idx, t) {
+  wordIdx = ((idx % words.length) + words.length) % words.length;
+  wordStart = t;
+  [maskA, maskB] = [maskB, maskA]; [blurA, blurB] = [blurB, blurA];
+  buildMask(words[wordIdx], maskB, blurB);
+  morphStart = t;
+  letters = [...words[wordIdx]].filter(c => c.trim()).join('') || '·';
+  updateBeliefUI();
+}
+function rebuildCurrent() {
+  buildMask(words[wordIdx], maskB, blurB);
+  maskA.set(maskB); blurA.set(blurB);
+}
+function setSentence(s, t) {
+  words = s.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) words = ['·'];
+  goWord(0, t);
+}
+
+const blEl = document.getElementById('bl'), countEl = document.getElementById('count');
+function updateBeliefUI() {
+  blEl.innerHTML = '';
+  words.forEach((w, i) => {
+    const s = document.createElement('span'); s.textContent = w;
+    if (i === wordIdx) s.className = 'on';
+    blEl.appendChild(s); blEl.appendChild(document.createTextNode(' '));
+  });
+  countEl.textContent = `${String(wordIdx + 1).padStart(2, '0')}/${String(words.length).padStart(2, '0')}`;
+}
+
+/* ---------- 시점 ---------- */
+function view() {
+  const a = CFG.angle * Math.PI / 180, C = Math.cos(a), S = Math.sin(a);
+  const shift = document.body.classList.contains('panel') && CFG.panelShift && W > 700;
+  const vw = shift ? W - panelW() : W;
+  const cell = (W / (2 * C) + H / (2 * S)) / N * 1.04 * CFG.zoom;
+  return { C, S, cell, vw, e: vw / 2, f: H / 2 - N * cell * S };
+}
+const panelW = () => document.getElementById('panel').offsetWidth || 330;
+function screenToGrid(X, Y) {
+  const v = view();
+  const u = (X - v.e) / v.C, w = (Y - v.f) / v.S;
+  return { gx: (u + w) / 2 / v.cell, gy: (w - u) / 2 / v.cell };
+}
+
+const FONTS = {
+  gothic: '"Apple SD Gothic Neo","Noto Sans KR",sans-serif',
+  mono: 'ui-monospace,"SF Mono",Menlo,monospace',
+  serif: '"AppleMyungjo","Nanum Myeongjo","Noto Serif KR",serif'
+};
+
+/* ==================================================================
+   한 프레임
+   ================================================================== */
+function frame(t, dt, now) {
+  if (!paused && CFG.autoplay && t - wordStart > CFG.wordTime) goWord(wordIdx + 1, t);
+
+  if (CFG.idle && now - pointer.last > CFG.idleDelay * 1000) {
+    const tx = N / 2 + Math.sin(t * 0.45) * N * 0.22, ty = N / 2 + Math.sin(t * 0.31 + 1.3) * N * 0.22;
+    pointer.gx += (tx - pointer.gx) * Math.min(1, dt * 2);
+    pointer.gy += (ty - pointer.gy) * Math.min(1, dt * 2);
+  }
+  const bx = pointer.gx, by = pointer.gy, R2 = CFG.brushR * CFG.brushR;
+  const mt = t - morphStart;
+  const mDelay = CFG.morphTime * CFG.morphSpread, mDur = Math.max(0.05, CFG.morphTime * (1 - CFG.morphSpread));
+  const shift = Math.floor(t * CFG.echoSpeed), flickTick = Math.floor(t * 18);
+  const fade = Math.exp(-dt / CFG.paintFade);
+  const ws = CFG.waveScale, wsp = CFG.waveSpeed;
+  const matCut = 2.2 - CFG.tileRatio * 4.4;
+  const gap = Math.round(CFG.echoGap);
+
+  const d = new Date();
+  const clock = [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join('');
+  const msDigit = String(Math.floor(d.getMilliseconds() / 100));
+
+  const v = view(), s = v.cell;
+  ictx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ictx.fillStyle = CFG.bg; ictx.fillRect(0, 0, W, H);
+  ictx.setTransform(dpr * v.C, dpr * v.S, -dpr * v.C, dpr * v.S, dpr * v.e, dpr * v.f);
+
+  const tiles = [], circles = [], dias = [], lets = [];
+  const LL = letters.length;
+  for (let y = 0; y < N; y++) {
+    const band = Math.floor((y + 3) / gap), er = (y + 3) % gap, edir = band % 2 ? 1 : -1;
+    for (let x = 0; x < N; x++) {
+      const i = y * N + x;
+      const k = clamp01((mt - hash(i) * mDelay) / mDur);
+      const m = maskA[i] + (maskB[i] - maskA[i]) * k;
+      const bl = blurA[i] + (blurB[i] - blurA[i]) * k;
+
+      let ech = 0;
+      if (er < 7 && bl < 0.05) ech = echoBits[er][(((x + band * 7 + edir * shift) % echoCols) + echoCols) % echoCols];
+
+      const dx = x + 0.5 - bx, dy = y + 0.5 - by, d2 = dx * dx + dy * dy;
+      const brush = d2 < R2 * 6 ? CFG.brushPower * Math.exp(-d2 / R2) : 0;
+      if (pointer.down && d2 < R2 * 4)
+        paint[i] = Math.max(-1.4, Math.min(1.4, paint[i] + (pointer.erase ? -1 : 1) * CFG.paintSpeed * dt * Math.exp(-d2 / R2)));
+      paint[i] *= fade;
+      const churn = (k > 0 && k < 1) ? (hash(i + flickTick * 13.7) - 0.5) * CFG.churn : 0;
+      const wave = 0.5 + 0.5 * Math.sin(x * ws + t * wsp + Math.sin(y * ws * 0.8 + t * wsp * 0.45) * 2);
+      const blob = Math.sin(x * ws * 0.43 + t * 0.2) * Math.sin(y * ws * 0.52 - t * 0.15);
+      let val = m * CFG.wordWeight + bl * CFG.halo + ech * CFG.echoAmp + (wave - 0.5) * CFG.waveAmp
+              + blob * CFG.blobAmp + brush + paint[i] + churn;
+      if (pointer.erase && pointer.down && d2 < R2) val -= 1.5;
+
+      let lvl = val < CFG.thEmpty ? 0 : val < CFG.thDiamond ? 1 : val < CFG.thLetter ? 2 : 3;
+      if (lvl === 3) {
+        const mat = Math.sin(x * 0.13 - t * 0.3) + Math.cos(y * 0.11 + t * 0.25) + (brush > 0.6 ? 0.8 : 0);
+        if (val > CFG.thTile && mat > matCut) lvl = 4;
+      }
+      if (shown[i] !== lvl) { shown[i] = lvl; pop[i] = 0; }
+      pop[i] = Math.min(1, pop[i] + dt * CFG.popSpeed);
+      if (!lvl) continue;
+      const kk = ease(pop[i]);
+      const cx = (x + 0.5) * s, cy = (y + 0.5) * s;
+      if (lvl === 1) dias.push(cx, cy, kk);
+      else if (lvl === 2) lets.push(cx, cy, kk, letters[((x + y * 3) % LL + LL) % LL]);
+      else if (lvl === 3) circles.push(cx, cy, kk);
+      else {
+        let ch;
+        if (hash(i) < CFG.flicker) ch = CFG.tileMode === 'clock' ? msDigit : '01%'[Math.floor(hash(i + flickTick) * 3)];
+        else if (CFG.tileMode === 'clock') ch = clock[((x + y) % 6 + 6) % 6];
+        else if (CFG.tileMode === 'bits') ch = '01%'[Math.floor(hash(i * 3.1 + Math.floor(t * 0.6 + hash(i) * 7)) * 3)];
+        else ch = letters[((x - y) % LL + LL) % LL];
+        tiles.push(cx, cy, kk, ch);
+      }
+    }
+  }
+
+  // 큰 글씨: 타일 + 원
+  ictx.fillStyle = CFG.big; ictx.beginPath();
+  const glue = CFG.tileSize >= 0.99 ? 0.8 : 0;
+  for (let j = 0; j < tiles.length; j += 4) {
+    const h = (s * CFG.tileSize * tiles[j + 2] + glue) / 2; ictx.rect(tiles[j] - h, tiles[j + 1] - h, h * 2, h * 2);
+  }
+  for (let j = 0; j < circles.length; j += 3) {
+    const r = Math.max(0, s * CFG.circleSize * circles[j + 2]);
+    ictx.moveTo(circles[j] + r, circles[j + 1]); ictx.arc(circles[j], circles[j + 1], r, 0, Math.PI * 2);
+  }
+  ictx.fill();
+  // 점: 마름모
+  ictx.fillStyle = CFG.dot; ictx.beginPath();
+  for (let j = 0; j < dias.length; j += 3) {
+    const h = Math.max(0, s * CFG.diamondSize * dias[j + 2]); ictx.rect(dias[j] - h, dias[j + 1] - h, h * 2, h * 2);
+  }
+  ictx.fill();
+
+  ictx.textAlign = 'center'; ictx.textBaseline = 'middle';
+  ictx.fillStyle = CFG.tileText;
+  ictx.font = `500 ${(s * CFG.tileTextSize).toFixed(1)}px ${CFG.tileMode === 'word' ? FONTS.gothic : FONTS.mono}`;
+  for (let j = 0; j < tiles.length; j += 4) if (tiles[j + 2] > 0.5) ictx.fillText(tiles[j + 3], tiles[j], tiles[j + 1] + s * 0.03);
+
+  // 작은 글씨
+  ictx.fillStyle = CFG.small;
+  const ff = FONTS[CFG.smallFont] || FONTS.gothic, wgt = CFG.smallWeight;
+  for (let j = 0; j < lets.length; j += 4) {
+    const fs = s * CFG.smallSize * lets[j + 2];
+    if (fs < 0.5) continue;
+    ictx.font = `${wgt} ${fs.toFixed(1)}px ${ff}`;
+    ictx.fillText(lets[j + 3], lets[j], lets[j + 1] + s * 0.04);
+  }
+
+  if (CFG.showCursor) {
+    const gx = Math.floor(bx), gy = Math.floor(by);
+    ictx.strokeStyle = CFG.cursor; ictx.lineWidth = 1.4;
+    ictx.strokeRect(gx * s, gy * s, s, s);
+    ictx.setLineDash([3, 4]);
+    ictx.beginPath(); ictx.arc(bx * s, by * s, CFG.brushR * s * 1.15, 0, Math.PI * 2); ictx.stroke();
+    ictx.setLineDash([]);
+  }
+
+  if (CFG.showReadout) {
+    ictx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ictx.fillStyle = CFG.ui; ictx.font = '11px ui-monospace, Menlo, monospace'; ictx.textAlign = 'right'; ictx.textBaseline = 'top';
+    const vwR = document.body.classList.contains('panel') ? W - panelW() : W;
+    ictx.fillText(`${clock.slice(0, 2)}:${clock.slice(2, 4)}:${clock.slice(4)}.${msDigit}  X ${String(Math.floor(bx)).padStart(2, '0')} Y ${String(Math.floor(by)).padStart(2, '0')}`, vwR - 16, 18);
+  }
+}
+
+/* ==================================================================
+   패널
+   ================================================================== */
+const pbody = document.getElementById('pbody');
+const locksNext = new Set();
+const fmt = (it, v) => it.pct ? Math.round(v * 100) : (Number.isInteger(it.step) && it.step >= 1 ? v : (+v).toFixed(it.step < 0.1 ? 2 : 1)) + (it.unit ? ' ' + it.unit : '');
+
+function applyCSS() {
+  const r = document.documentElement.style;
+  r.setProperty('--bg', CFG.bg); r.setProperty('--ink', CFG.big); r.setProperty('--hot', CFG.small); r.setProperty('--txt', CFG.ui);
+  document.body.classList.toggle('nocap', !CFG.showCaption);
+}
+
+let sentenceTimer = 0;
+function onChange(k) {
+  const t = performance.now() / 1000;
+  if (['bg', 'big', 'small', 'ui', 'showCaption'].includes(k)) applyCSS();
+  if (k === 'sentence') { clearTimeout(sentenceTimer); sentenceTimer = setTimeout(() => setSentence(CFG.sentence, performance.now() / 1000), 250); }
+  if (k === 'cells') { allocGrid(); rebuildCurrent(); }
+  if (k === 'maxGlyph' || k === 'fit') rebuildCurrent();
+  if (k === 'echoText') buildEcho();
+  if (k === 'autoplay' && CFG.autoplay) wordStart = t;
+}
+
+function buildPanel() {
+  pbody.innerHTML = '';
+  if (fixedGroups.length) {
+    const f = document.createElement('div'); f.className = 'fixed';
+    f.innerHTML = '<b>🔒 고정된 설정</b>' + fixedGroups.map(g => `${GROUP_TITLE[g]} — ver${String(fixedFrom[g] || '?').padStart(2, '0')}에서 정함`).join('<br>');
+    pbody.appendChild(f);
+  }
+  for (const g of SCHEMA) {
+    if (fixedGroups.includes(g.id)) continue;
+    const det = document.createElement('details'); det.open = true;
+    const sum = document.createElement('summary');
+    sum.textContent = g.title;
+    const lk = document.createElement('label');
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = locksNext.has(g.id);
+    cb.addEventListener('change', () => cb.checked ? locksNext.add(g.id) : locksNext.delete(g.id));
+    lk.append(cb, '다음 버전에서 잠그기');
+    lk.addEventListener('click', e => e.stopPropagation());
+    sum.appendChild(lk);
+    det.appendChild(sum);
+    for (const it of g.items) det.appendChild(buildRow(it));
+    pbody.appendChild(det);
+  }
+}
+
+function buildRow(it) {
+  const row = document.createElement('div'); row.className = 'row';
+  if (it.type === 'presets') {
+    const box = document.createElement('div'); box.className = 'presets';
+    PRESETS.forEach(p => {
+      const b = document.createElement('button');
+      b.innerHTML = `<i style="background:${p.bg}"></i><i style="background:${p.big}"></i><i style="background:${p.small}"></i>${p.name}`;
+      b.addEventListener('click', () => {
+        for (const k of ['bg', 'big', 'dot', 'small', 'tileText', 'cursor', 'ui']) CFG[k] = p[k];
+        applyCSS(); buildPanel();
+      });
+      box.appendChild(b);
+    });
+    row.appendChild(box);
+    return row;
+  }
+  if (it.type === 'check') {
+    row.classList.add('check');
+    const inp = document.createElement('input'); inp.type = 'checkbox'; inp.checked = !!CFG[it.k]; inp.id = 'c_' + it.k;
+    const lb = document.createElement('label'); lb.htmlFor = inp.id; lb.textContent = it.label;
+    inp.addEventListener('change', () => { CFG[it.k] = inp.checked; onChange(it.k); });
+    row.append(inp, lb);
+    return row;
+  }
+  const head = document.createElement('div'); head.className = 'rh';
+  const lab = document.createElement('span'); lab.textContent = it.label;
+  const val = document.createElement('em');
+  head.append(lab, val); row.appendChild(head);
+  let inp;
+  if (it.type === 'range') {
+    inp = document.createElement('input'); inp.type = 'range';
+    inp.min = it.min; inp.max = it.max; inp.step = it.step; inp.value = CFG[it.k];
+    val.textContent = fmt(it, CFG[it.k]);
+    inp.addEventListener('input', () => { CFG[it.k] = +inp.value; val.textContent = fmt(it, CFG[it.k]); onChange(it.k); });
+  } else if (it.type === 'color') {
+    inp = document.createElement('input'); inp.type = 'color'; inp.value = CFG[it.k];
+    val.textContent = CFG[it.k];
+    inp.addEventListener('input', () => { CFG[it.k] = inp.value; val.textContent = inp.value; onChange(it.k); });
+  } else if (it.type === 'select') {
+    inp = document.createElement('select');
+    it.options.forEach(([v, l]) => { const o = document.createElement('option'); o.value = v; o.textContent = l; inp.appendChild(o); });
+    inp.value = CFG[it.k];
+    inp.addEventListener('change', () => { CFG[it.k] = inp.value; onChange(it.k); });
+  } else {
+    inp = document.createElement('input'); inp.type = 'text'; inp.value = CFG[it.k];
+    inp.addEventListener('input', () => { CFG[it.k] = inp.value; onChange(it.k); });
+  }
+  row.appendChild(inp);
+  if (it.hint) { const h = document.createElement('small'); h.textContent = it.hint; row.appendChild(h); }
+  return row;
+}
+
+/* ---------- JSON / 초기화 ---------- */
+const status = msg => document.getElementById('pstatus').textContent = msg;
+document.getElementById('copyJson').addEventListener('click', async () => {
+  const txt = JSON.stringify(CFG, null, 2);
+  try { await navigator.clipboard.writeText(txt); status('설정 JSON을 복사했습니다.'); }
+  catch { prompt('복사하세요', txt); }
+});
+document.getElementById('pasteJson').addEventListener('click', () => {
+  const txt = prompt('설정 JSON을 붙여넣으세요');
+  if (!txt) return;
+  try { applyValues(JSON.parse(txt)); status('붙여넣은 값을 적용했습니다.'); }
+  catch { status('JSON 형식이 올바르지 않습니다.'); }
+});
+document.getElementById('reset').addEventListener('click', () => {
+  applyValues({ ...DEFAULTS, ...(FIXED ? FIXED.values : {}) });
+  status('이 버전의 처음 값으로 돌렸습니다.');
+});
+function applyValues(obj) {
+  for (const k in obj) if (k in DEFAULTS && !isFixedKey(k)) CFG[k] = obj[k];
+  allocGrid(); buildEcho(); applyCSS(); setSentence(CFG.sentence, performance.now() / 1000); buildPanel();
+}
+function isFixedKey(k) { return fixedGroups.some(g => SCHEMA.find(s => s.id === g).items.some(it => it.k === k)); }
+
+/* ==================================================================
+   저장 → 다음 버전 파일 (이전 버전은 절대 덮어쓰지 않음)
+   ================================================================== */
+const pad2 = n => String(n).padStart(2, '0');
+const M_START = '/*@@' + 'FIXED_START*/', M_END = '/*@@' + 'FIXED_END*/';
+
+function buildSource(next, note) {
+  const groups = [...new Set([...fixedGroups, ...locksNext])];
+  const from = { ...fixedFrom };
+  for (const g of locksNext) if (!from[g]) from[g] = VERSION; // 이 버전에서 정한 값
+  const entry = {
+    ver: next, from: VERSION, date: new Date().toLocaleString('ko-KR'),
+    note: note || '', locked: [...locksNext].map(g => GROUP_TITLE[g])
+  };
+  const log = [...LOG, entry];
+  const safe = o => JSON.stringify(o, null, 2).replace(/</g, '\\u003c');
+  const lockLine = groups.length
+    ? groups.map(g => `${GROUP_TITLE[g]}(ver${pad2(from[g])})`).join(', ')
+    : '없음';
+  const block = [
+    M_START,
+    `// ── ver${pad2(next)} ── ${entry.date} 저장 · ver${pad2(VERSION)}에서 이어짐`,
+    `// 이번 버전 메모: ${(note || '-').replace(/\n/g, ' / ').replace(/\*\//g, '* /')}`,
+    `// 잠긴 그룹 (각 버전에서 정한 고정 설정, 패널에서 빠짐): ${lockLine}`,
+    `const VERSION = ${next};`,
+    `// ver${pad2(VERSION)}에서 정한 고정 설정`,
+    `const FIXED = ${safe({ values: CFG, groups, from })};`,
+    `const LOG = ${safe(log)};`,
+    M_END
+  ].join('\n');
+  const a = SOURCE.indexOf(M_START), b = SOURCE.indexOf(M_END);
+  let out = SOURCE.slice(0, a) + block + SOURCE.slice(b + M_END.length);
+  out = out.replace(/<span id="pver">[^<]*<\/span>/, `<span id="pver">${CONCEPT}-ver${pad2(next)}</span>`);
+  return out;
+}
+
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('pixel-iso-save', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function kvGet(k) { try { const db = await idb(); return await new Promise(res => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); }); } catch { return null; } }
+async function kvSet(k, v) { try { const db = await idb(); db.transaction('kv', 'readwrite').objectStore('kv').put(v, k); } catch {} }
+
+async function save() {
+  const note = document.getElementById('note').value.trim();
+  if (!window.showDirectoryPicker) return saveDownload(note);
+  try {
+    let dir = await kvGet('dir');
+    if (dir) {
+      let perm = await dir.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') perm = await dir.requestPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') dir = null;
+    }
+    if (!dir) {
+      status('저장할 폴더(7—픽셀)를 골라 주세요. 한 번만 고르면 기억합니다.');
+      dir = await window.showDirectoryPicker({ id: 'pixel-iso', mode: 'readwrite' });
+      await kvSet('dir', dir);
+    }
+    let max = VERSION;
+    const re = new RegExp('^' + CONCEPT + '-ver(\\d+)\\.html$');
+    for await (const [name] of dir.entries()) { const m = name.match(re); if (m) max = Math.max(max, +m[1]); }
+    const next = max + 1, fname = `${CONCEPT}-ver${pad2(next)}.html`;
+    const fh = await dir.getFileHandle(fname, { create: true });
+    const w = await fh.createWritable(); await w.write(buildSource(next, note)); await w.close();
+    status(`저장됨 → ${dir.name}/${fname}`);
+    document.getElementById('note').value = '';
+  } catch (e) {
+    if (e && e.name === 'AbortError') status('폴더 선택을 취소했습니다.');
+    else { status('폴더에 바로 쓰지 못해 다운로드로 저장합니다.'); saveDownload(note); }
+  }
+}
+function saveDownload(note) {
+  const key = 'pixel-iso-lastver';
+  let last = 0; try { last = +localStorage.getItem(key) || 0; } catch {}
+  const next = Math.max(VERSION, last) + 1, fname = `${CONCEPT}-ver${pad2(next)}.html`;
+  const blob = new Blob([buildSource(next, note)], { type: 'text/html' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  try { localStorage.setItem(key, next); } catch {}
+  status(`다운로드됨 → ${fname} (이 브라우저는 폴더 직접 저장을 지원하지 않습니다. 7—픽셀 폴더로 옮겨 주세요)`);
+}
+document.getElementById('save').addEventListener('click', save);
+
+function renderLog() {
+  const el = document.getElementById('log');
+  if (!LOG.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<b>작업 기록</b>' + LOG.map(e =>
+    `<div>ver${pad2(e.ver)} · ${e.date}${e.locked && e.locked.length ? ' · 🔒' + e.locked.join(', ') : ''}${e.note ? '<br>' + e.note.replace(/</g, '&lt;') : ''}</div>`).join('');
+}
+
+/* ==================================================================
+   입력
+   ================================================================== */
+iso.addEventListener('pointermove', e => {
+  const g = screenToGrid(e.clientX, e.clientY);
+  pointer.gx = g.gx; pointer.gy = g.gy; pointer.last = performance.now(); pointer.erase = e.shiftKey || e.altKey;
+});
+iso.addEventListener('pointerdown', e => {
+  pointer.down = true; pointer.erase = e.shiftKey || e.altKey || e.button === 2;
+  pointer.last = performance.now(); iso.setPointerCapture(e.pointerId);
+  const g = screenToGrid(e.clientX, e.clientY); pointer.gx = g.gx; pointer.gy = g.gy;
+});
+addEventListener('pointerup', () => pointer.down = false);
+iso.addEventListener('contextmenu', e => e.preventDefault());
+iso.addEventListener('wheel', e => {
+  e.preventDefault();
+  CFG.brushR = Math.max(1, Math.min(16, CFG.brushR * (e.deltaY > 0 ? 0.92 : 1.08)));
+  pointer.last = performance.now();
+}, { passive: false });
+
+function scatter() {
+  paint.fill(0);
+  for (let n = 0; n < 7; n++) {
+    const px = Math.random() * N, py = Math.random() * N, r = 2 + Math.random() * 6, sgn = Math.random() < .7 ? 1 : -1;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++)
+      paint[y * N + x] += sgn * 1.2 * Math.exp(-((x - px) ** 2 + (y - py) ** 2) / (r * r));
+  }
+}
+const pauseBtn = document.getElementById('pause');
+pauseBtn.addEventListener('click', () => { paused = !paused; pauseBtn.textContent = paused ? 'Play' : 'Pause'; });
+document.getElementById('shuf').addEventListener('click', scatter);
+document.getElementById('ptog').addEventListener('click', () => document.body.classList.toggle('panel'));
+addEventListener('keydown', e => {
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { if (e.key === 'Escape') e.target.blur(); return; }
+  const t = performance.now() / 1000;
+  if (e.key === ' ' || e.key === 'ArrowRight') { e.preventDefault(); goWord(wordIdx + 1, t); }
+  else if (e.key === 'ArrowLeft') goWord(wordIdx - 1, t);
+  else if (e.key === 'r' || e.key === 'R') scatter();
+  else if (e.key === 'p' || e.key === 'P') document.body.classList.toggle('panel');
+  else if (e.key === 's' || e.key === 'S') {
+    const a = document.createElement('a'); a.download = `${CONCEPT}-ver${pad2(VERSION)}-${Date.now()}.png`; a.href = iso.toDataURL('image/png'); a.click();
+  }
+});
+function resize() {
+  W = innerWidth; H = innerHeight; dpr = Math.min(window.devicePixelRatio || 1, 2);
+  iso.width = Math.round(W * dpr); iso.height = Math.round(H * dpr);
+}
+addEventListener('resize', resize);
+
+/* ==================================================================
+   시작
+   ================================================================== */
+document.getElementById('capTitle').textContent = `7 — PIXEL · ver${pad2(VERSION)}`;
+resize(); allocGrid(); buildEcho(); applyCSS(); buildPanel(); renderLog();
+setSentence(CFG.sentence, performance.now() / 1000);
+let prev = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
+  frame(now / 1000, dt, now);
+  requestAnimationFrame(loop);
+}
+(document.fonts ? document.fonts.ready : Promise.resolve()).then(() => {
+  rcache.clear(); buildEcho(); setSentence(CFG.sentence, performance.now() / 1000);
+  requestAnimationFrame(loop);
+});
+</script></body></html>
